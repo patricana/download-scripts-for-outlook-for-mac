@@ -1,0 +1,472 @@
+on run
+	
+	set catConfirmDialog to display dialog "Have you created two new categories called txt and eml in outlook?" buttons {"Yes", "No"}
+	set catConfirmButton to button returned of catConfirmDialog
+	if catConfirmButton is "No" then
+		display dialog "Need to first create these two categories in your Outlook for the program to work" buttons {"Ok"}
+		return
+	end if
+	
+	set foldDialog to display dialog "Which folder you want to save?" buttons {"inbox", "sent items"}
+	set button7 to button returned of foldDialog
+	set outlookFoldInFocus to button7
+	
+	set outDialog to display dialog "Which download versions do you need?" buttons {"Text only", "EML only", "Text and EML"} default button "Text only"
+	set button4 to button returned of outDialog
+	
+	set outTxt to false
+	set outEml to false
+	if button4 is "Text only" then
+		set outTxt to true
+	else if button4 is "Eml only" then
+		set outEml to true
+	else if button4 is "Text and EML" then
+		set outTxt to true
+		set outEml to true
+	end if
+	
+	set disclDialog to display dialog "WARNING: YOU WILL NOW BE ASKED TO CHOOSE FOLDER FOR DOWNLOADS. MAKE SURE YOU CREATE DEDICATED OUTPUT FOLDERS ONLY FOR THIS PURPUSE AS THE PROGRAM CAN CREATE HUNDERDS OF NEW ITEMS IN THE FOLDERS YOU SELECT THAT WILL DROWN OUT ANY EXISTING FILES" & return & return & "You need to select the root folder that should contain two subfolders named 'txt' and 'eml' in it" buttons {"Understood", "Stop, I need to create folders"}
+	
+	set disclButton to button returned of disclDialog
+	if disclButton is "Stop, I need to create folders" then
+		return
+	end if
+	
+	try
+		set outputFolder to choose folder default location (path to desktop folder)
+	on error
+		return
+	end try
+	
+	if outTxt then
+		set saveTxtFoldPath to (outputFolder as text) & "txt:"
+		log saveTxtFoldPath
+		
+		tell application "Finder"
+			if not (exists saveTxtFoldPath) then
+				display dialog "Subfolder named txt doesn't exist in the main folder you selected. Please create it and restart program"
+				return
+			end if
+		end tell
+	end if
+	
+	if outEml then
+		set saveEmlFoldPath to (outputFolder as text) & "eml:"
+		
+		tell application "Finder"
+			if not (exists saveEmlFoldPath) then
+				display dialog "Subfolder named eml doesn't exist in the main folder you selected. Please create it and restart program"
+				return
+			end if
+		end tell
+	end if
+	
+	
+	
+	
+	
+	
+	
+	-- ALSO ADD NUM ITEMS PROCESSED SUCCESSFULLY IN THE ERROR DIALOG BOX
+	
+	repeat
+		try
+			set prefDialog to display dialog "Enter batch size to process and wait time after each batch to prevent crashes (separated by a comma):" default answer "100, 5" buttons {"Stop", "Go"} default button "Go"
+			set button1 to button returned of prefDialog
+			if button1 is "Stop" then
+				display dialog "Operation cancelled." buttons {"OK"} default button "OK"
+				return
+			end if
+			
+			set userInput to text returned of prefDialog
+			set AppleScript's text item delimiters to ","
+			set inputList to text items of userInput
+			set AppleScript's text item delimiters to ""
+			
+			if (count of inputList) is not 2 then error "Please enter two values separated by a comma."
+			
+			set batchSize to item 1 of inputList as integer
+			set delayInterval to item 2 of inputList as integer
+			
+			exit repeat
+		on error errMsg
+			
+			display dialog "Invalid input: " & errMsg & ". Please enter two integers like: 10, 5" buttons {"Try Again"} default button 1
+			
+		end try
+	end repeat
+	
+	-- Final confirmation with Cancel
+	set finalDialog to display dialog "Batch Size: " & batchSize & return & "Wait Interval: " & delayInterval & return & "Proceed?" buttons {"Stop", "Go"} default button "Go"
+	set button2 to button returned of finalDialog
+	
+	if button2 is "Stop" then
+		display dialog "Operation cancelled." buttons {"OK"} default button "OK"
+		return
+	end if
+	
+	
+	
+	set errDialog to display dialog "Email download and saving is not always successful, how many erros to tolerate before stopping?" buttons {"0", "50", "100"} default button "50"
+	set button3 to button returned of errDialog as integer
+	set errMax to button3 as integer
+	
+	
+	
+	
+	
+	set dirDialog to display dialog "Select direction for processing" buttons {"Start from top (first item)", "Start from bottom (last item)"}
+	set button6 to button returned of dirDialog
+	
+	if button6 is "Start from top (first item)" then
+		set processDir to "forward"
+	else
+		set processDir to "reverse"
+	end if
+	
+	set rangeDialog to display dialog "Enter number of items to process?" buttons {"First 100", "Full Folder"}
+	set button5 to button returned of rangeDialog
+	
+	---------------------------------------
+	--set outputFolder to choose folder with prompt "Pick a folder:" default location (path to desktop folder)
+	--set saveTxtFoldPath to (path to desktop as text) & "email-dl:" & "txt:"
+	--set saveEmlFoldPath to (path to desktop as text) & "email-dl:" & "eml:"
+	
+	
+	set ctTxt to 0
+	set ctEml to 0
+	
+	set errCtTxt to 0
+	set errCtEml to 0
+	
+	
+	tell application "Microsoft Outlook"
+		--activate -- Bring Outlook to the front
+		
+		if outlookFoldInFocus is "inbox" then
+			set outlookFoldObj to a reference to inbox
+		else if outlookFoldInFocus is "inbox" then
+			set outlookFoldObj to a reference to sent items
+		end if
+		
+		repeat with cat in categories
+			if name of cat is "txt" then
+				set txtCat to cat
+			else if name of cat is "eml" then
+				set emlCat to cat
+			end if
+		end repeat
+		
+		if button5 is "Full Folder" then
+			set itemUniverseToProcess to count of messages of outlookFoldObj
+		else if button5 is "First 100" then
+			set itemUniverseToProcess to 100
+		end if
+		
+		if processDir is "forward" then
+			set beginBatch to 1
+		else
+			set beginBatch to itemUniverseToProcess
+		end if
+		
+		repeat
+			
+			if processDir is "forward" then
+				if beginBatch > itemUniverseToProcess then
+					exit repeat
+				end if
+				
+				set endBatch to (beginBatch + batchSize - 1)
+				if endBatch > itemUniverseToProcess then
+					set endBatch to itemUniverseToProcess
+				end if
+				
+				set msgBatch to messages beginBatch thru endBatch of outlookFoldObj
+			else
+				if beginBatch < 1 then
+					exit repeat
+				end if
+				
+				set endBatch to (beginBatch - batchSize + 1)
+				if endBatch < 1 then
+					set endBatch to 1
+				end if
+				
+				set msgBatch to messages endBatch thru beginBatch of outlookFoldObj
+				
+			end if
+			
+			--repeat until 
+			repeat with msg in msgBatch
+				try
+					set msgSubject to subject of msg
+					set msgSender to sender of msg -- still an object, need to extract text (doing in next line below)
+					set senderEmail to address of msgSender
+					set senderName to name of msgSender
+					set msgContent to plain text content of msg
+					set msgRecTime to time received of msg
+					set isMeet to is meeting of msg
+					set yr to year of msgRecTime
+					set mo to (month of msgRecTime as integer)
+					set dy to day of msgRecTime
+					set recipientsData to my getRecipientAddressesByType(msg) --returns a record of lists
+					set msgID to id of msg
+					set msgCats to categories of msg --extract message categories
+					set atsString to my getAtsDetails(msg) --returns a record of lists
+				on error errMsg number ErrNum
+					log ("Error in accessing msg: " & ErrNum as string) & "-" & errMsg
+				end try
+				
+				--set r to (random number from 1 to 9) as integer
+				
+				
+				
+				set fileNameString to yr & "-" & mo & "-" & dy & "-" & msgID & "-" & my getPreview({senderName, my cleanString(msgSubject)}, 9)
+				
+				
+				set foundTxtCat to false
+				set foundEmlCat to false
+				
+				repeat with cat in msgCats
+					set n to name of cat
+					if n is equal to name of txtCat then
+						set foundTxtCat to true
+					end if
+					
+					if n is equal to name of emlCat then
+						set foundEmlCat to true
+					end if
+				end repeat
+				
+				if outTxt then
+					if not foundTxtCat then
+						set fileNameTxt to fileNameString & ".txt"
+						set fullFilePathTxt to saveTxtFoldPath & fileNameTxt
+						log fullFilePathTxt
+						
+						set fileExistsTxt to false
+						tell application "Finder"
+							if exists fullFilePathTxt then
+								log "Txt file already exists, skipping it. Email id: " & msgID
+								set fileExistsTxt to true
+							else
+								set fileExistsTxt to false
+							end if
+						end tell
+						
+						if not fileExistsTxt then
+							try
+								set fileRefTxt to open for access file fullFilePathTxt with write permission
+								set eof of fileRefTxt to 0
+								write "-----------------------------------" & return to fileRefTxt
+								if isMeet then
+									write "---THIS IS AN INVITE---" & return to fileRefTxt
+								end if
+								write "Message ID: " & msgID & return to fileRefTxt
+								write "Received: " & (msgRecTime) & return to fileRefTxt
+								write "Sender: " & senderEmail & return to fileRefTxt
+								set AppleScript's text item delimiters to "; "
+								write "TO: " & (toRecipients of recipientsData as string) & return to fileRefTxt
+								write "CC: " & (ccRecipients of recipientsData as string) & return to fileRefTxt
+								write "Attachments: " & atsString & return to fileRefTxt
+								set AppleScript's text item delimiters to ""
+								write "Subject: " & msgSubject & return to fileRefTxt
+								write "-----------------------------------" & return to fileRefTxt
+								write return to fileRefTxt
+								write msgContent to fileRefTxt
+								write "--End of message text--" to fileRefTxt
+								close access fileRefTxt
+								
+								set end of msgCats to txtCat
+								log "text file successfully created - " & msgID
+								set ctTxt to ctTxt + 1
+								
+							on error outerErrMsg number outerErrNum
+								log "outer error num: " & outerErrNum
+								set errCtTxt to errCtTxt + 1
+								try
+									close access file fullFilePathTxt
+								end try
+							end try
+						end if
+					end if
+				end if
+				
+				if outEml then
+					if not foundEmlCat then
+						set fileNameEml to fileNameString & ".eml"
+						set fullFilePathEml to saveEmlFoldPath & fileNameEml
+						log fullFilePathEml
+						
+						set fileExistsEml to false
+						tell application "Finder"
+							if exists fullFilePathEml then
+								log "Eml file already exists, skipping it. Email id: " & msgID
+								set fileExistsEml to true
+							else
+								set fileExistsEml to false
+							end if
+						end tell
+						
+						if not fileExistsEml then
+							try
+								save msg in file fullFilePathEml as ".eml"
+								
+								set end of msgCats to emlCat
+								log "Eml file successfully created - " & msgID
+								set ctEml to ctEml + 1
+							on error errMsg number ErrNum
+								set errCtEml to errCtEml + 1
+								log "Eml error num: " & ErrNum & "  " & errMsg
+							end try
+						end if
+					end if
+				end if
+				
+				if not (foundEmlCat and foundTxtCat) then
+					set categories of msg to msgCats
+				end if
+				
+				if errCtTxt > errMax then
+					set errorMessage to "Text saving errors:  " & errCtTxt & return
+					set errorMessage to errorMessage & "EML saving errors:  " & errCtEml & return
+					set errorMessage to errorMessage & "Max allowed on either were:  " & errMax & return & return
+					set errorMessage to errorMessage & "Successful text downloads: " & ctTxt & return
+					set errorMessage to errorMessage & "Successful eml downloads: " & ctEml & return
+					
+					display dialog errorMessage buttons {"OK"}
+					return
+				end if
+				if errCtEml > errMax then
+					set errorMessage to "Text saving errors:  " & errCtTxt & return
+					set errorMessage to errorMessage & "EML saving errors:  " & errCtEml & return
+					set errorMessage to errorMessage & "Max allowed on either were:  " & errMax & return & return
+					set errorMessage to errorMessage & "Successful text downloads: " & ctTxt & return
+					set errorMessage to errorMessage & "Successful eml downloads: " & ctEml & return
+					
+					
+					display dialog errorMessage buttons {"OK"}
+					return
+				end if
+				
+				
+			end repeat
+			
+			if processDir is "forward" then
+				set beginBatch to (endBatch + 1)
+			else
+				set beginBatch to (endBatch - 1)
+			end if
+			
+			delay delayInterval
+		end repeat
+	end tell
+end run
+
+on getRecipientAddressesByType(theMessage)
+	set toList to {}
+	set ccList to {}
+	set bccList to {}
+	
+	tell application "Microsoft Outlook"
+		repeat with r in recipients of theMessage
+			set recipientType to type of r
+			set recipientAddressObj to email address of r
+			set recipientEmail to address of recipientAddressObj
+			
+			if recipientType is to recipient type then
+				set end of toList to recipientEmail
+			else if recipientType is cc recipient type then
+				set end of ccList to recipientEmail
+			else if recipientType is bcc recipient type then
+				set end of bccList to recipientEmail
+			end if
+		end repeat
+	end tell
+	
+	return {toRecipients:toList, ccRecipients:ccList, bccRecipients:bccList}
+end getRecipientAddressesByType
+
+on getAtsDetails(msg)
+	set atsNames to {}
+	set atsSizes to {}
+	set output to ""
+	
+	tell application "Microsoft Outlook"
+		set atchs to attachments of msg
+		
+		if not (atchs is {}) then
+			repeat with atch in atchs
+				set atName to name of atch
+				set atSize to file size of atch
+				
+				set end of atsNames to atName
+				set end of atsSizes to atSize
+			end repeat
+			
+			repeat with i from 1 to count of atsNames
+				set update to item i of atsNames & "(" & my readableSize(item i of atsSizes) & ") "
+				set output to output & update
+			end repeat
+		end if
+	end tell
+	return output
+end getAtsDetails
+
+on getPreview(lis, wind)
+	set output to ""
+	
+	repeat with i from 1 to count of lis
+		if (length of item i of lis) > wind then
+			set output to output & (text 1 thru wind of item i of lis)
+		else
+			set output to output & item i of lis
+		end if
+		set output to output & "--"
+	end repeat
+	
+	return output
+end getPreview
+
+on cleanString(inputString)
+	set badChars to {":", "/", "\\", "*", "?", "\"", "<", ">", "|"}
+	repeat with badChar in badChars
+		set inputString to my replaceText(badChar, "", inputString)
+	end repeat
+	return inputString
+end cleanString
+
+on replaceText(find, replace, inputText)
+	set AppleScript's text item delimiters to find
+	set tempList to text items of inputText
+	set AppleScript's text item delimiters to replace
+	set outputText to tempList as text
+	set AppleScript's text item delimiters to ""
+	return outputText
+end replaceText
+
+on readableSize(siz)
+	
+	if siz > 1000000 then
+		set siz to round (siz / 1000000)
+		return (siz as string) & "MB"
+	else if siz > 1000 then
+		set siz to round (siz / 1000)
+		return (siz as string) & "KB"
+	else
+		return (siz as string) & "B"
+	end if
+end readableSize
+
+
+
+--on getNameFromEmail(em)
+--	set output to ""
+--	
+--	set loc to offset of "@" in em
+--	
+--	if loc is not 0 then
+--		set output to output & text 1 thru (loc - 1) of em
+--	end if
+--	return output
+--end getNameFromEmail
