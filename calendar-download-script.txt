@@ -1,0 +1,344 @@
+set todayDate to current date
+set beginPoint to todayDate - (time of todayDate)
+set timeStep to (7 * 24 * hours)
+set maxSteps to 72
+set stepCounter to 69
+set pauseAfterBatch to 7
+set pauseAfterEvent to 1
+set logFileName to "calenderLog.log"
+
+
+
+set beginPoint to beginPoint - (stepCounter * timeStep)
+
+
+set ct to 0
+
+try
+	set outputFolder to choose folder default location (path to desktop folder)
+	set outputFolder to outputFolder as text
+on error
+	return
+end try
+
+set logFilePath to outputFolder & logFileName
+
+my writeToLog(logFilePath, "script started --- " & (current date) as text)
+
+tell application "Microsoft Outlook"
+	set myCals to calendars
+	set cal to missing value
+	set calCount to missing value
+	
+	repeat with c in myCals
+		if id of c is 128 then
+			set cal to c
+			set calCount to count of calendar events of c
+			set myCals to missing value
+			exit repeat
+		end if
+	end repeat
+	
+	if cal is missing value then
+		my writeToLog(logFilePath, "correct calendar was not found")
+		return
+	end if
+	
+	repeat with cat in categories
+		if name of cat is "txt" then
+			set txtCat to cat
+		end if
+	end repeat
+	
+	repeat
+		set stepCounter to stepCounter + 1
+		my writeToLog(logFilePath, "Step Counter: " & stepCounter & "/" & maxSteps)
+		my writeToLog(logFilePath, "event download counter: " & ct)
+		
+		if stepCounter > maxSteps then
+			exit repeat
+		end if
+		
+		set endPoint to beginPoint - timeStep
+		set eventsInDay to calendar events of cal whose start time ≥ endPoint and start time < beginPoint
+		if (count of eventsInDay) > 0 then
+			repeat with e in eventsInDay
+				try
+					set eCats to categories of e
+				on error errMsg number ErrNum
+					my writeToLog(logFilePath, ("Error in accessing category data: " & ErrNum as string) & "-" & errMsg)
+				end try
+				
+				set eSubject to (subject of e as text)
+				set eStartTime to start time of e
+				set yr to (year of eStartTime as text)
+				set mo to ((month of eStartTime as integer) as text)
+				set dy to (day of eStartTime as text)
+				
+				my writeToLog(logFilePath, "scanned event -> " & yr & "-" & mo & "-" & dy & "--" & eSubject)
+				
+				set foundTxtCat to false
+				repeat with cat in eCats
+					set n to name of cat
+					if n is equal to name of txtCat then
+						set foundTxtCat to true
+					end if
+				end repeat
+				
+				if not foundTxtCat then
+					
+					try
+						set eID to id of e
+						set eOrganizer to organizer of e
+						
+						
+					on error errMsg number ErrNum
+						my writeToLog(logFilePath, ("Error in accessing event data: " & ErrNum as string) & "-" & errMsg)
+					end try
+					
+					
+					
+					
+					
+					
+					
+					set fileNameString to yr & "-" & mo & "-" & dy & "-" & eID & "-" & my getPreview({eOrganizer, my cleanString(eSubject)}, 9)
+					--log fileNameString
+					
+					
+					
+					
+					set fileNameTxt to fileNameString & ".txt"
+					set fullFilePathTxt to outputFolder & fileNameTxt
+					--log fullFilePathTxt
+					
+					
+					set fileExistsTxt to false
+					tell application "Finder"
+						if exists fullFilePathTxt then
+							--log "Txt file already exists, skipping it, event id: " & eID
+							set fileExistsTxt to true
+						else
+							set fileExistsTxt to false
+						end if
+					end tell
+					
+					if not fileExistsTxt then
+						try
+							set eContent to plain text content of e
+							set eEndTime to end time of e
+							set eDuration to my formattedTime(eEndTime - eStartTime)
+							set eLoc to (location of e as text)
+							set isAllDay to all day flag of e
+							set isRecur to is recurring of e
+							set eRecurObj to recurrence of e -- Note: this is either the recurrence obj or missing value
+							set eTZObj to timezone of e
+							set eTZName to name of eTZObj
+							set isPriv to is private of e
+							set attendeeData to my getAttendeeAddressesByType(e)
+						on error errMsg number ErrNum
+							my writeToLog(logFilePath, ("Error in accessing event data: " & ErrNum as string) & "-" & errMsg)
+						end try
+						
+						
+						
+						
+						try
+							set fileRefTxt to open for access file fullFilePathTxt with write permission
+							set eof of fileRefTxt to 0
+							write "-----------------------------------" & return to fileRefTxt
+							write "Event ID: " & eID & return to fileRefTxt
+							write "Organizer: " & eOrganizer & return to fileRefTxt
+							write "Subject: " & eSubject & return to fileRefTxt
+							write "Location: " & eLoc & return to fileRefTxt
+							set AppleScript's text item delimiters to "; "
+							write "Required: " & (reqAttendees of attendeeData as string) & return to fileRefTxt
+							write "Optional: " & (optAttendees of attendeeData as string) & return to fileRefTxt
+							set AppleScript's text item delimiters to ""
+							write "-----------------------------------" & return to fileRefTxt
+							write "Time Zone: " & eTZName & return to fileRefTxt
+							write "Start Time: " & (eStartTime) & return to fileRefTxt
+							write "End Time: " & (eEndTime) & return to fileRefTxt
+							write "Duration: " & eDuration & return to fileRefTxt
+							write "All Day Event: " & (isAllDay as text) & return to fileRefTxt
+							write "Is part of recurring series: " & (isRecur as text) & return to fileRefTxt
+							if eRecurObj is not missing value then
+								write "---recurrence start date: " & (start date of eRecurObj as text) & return to fileRefTxt
+								set AppleScript's text item delimiters to "; "
+								set endInfo to end date of eRcurObj
+								write "---recurrence end date type: " & (end type of endInfo as text) & return to fileRefTxt
+								set AppleScript's text item delimiters to ""
+								write "---recurrence end date info " & (data of endInfo as text) & return to fileRefTxt
+								
+								write "---recurrence type: " & (recurrence type of eRecurObj as text) & return to fileRefTxt
+								write "---recurrence interval: " & (recurrence interval of eRecurObj as text) & return to fileRefTxt
+								
+								
+							end if
+							
+							if isPriv is true then
+								write "Event is PRIVATE" & return to fileRefTxt
+							end if
+							
+							
+							write "-----------------------------------" & return to fileRefTxt
+							write return to fileRefTxt
+							if eContent is missing value then
+								write "--Empty event body--" & return to fileRefTxt
+							else
+								write eContent to fileRefTxt
+							end if
+							write "--End of event details--" to fileRefTxt
+							close access fileRefTxt
+							
+							set end of eCats to txtCat
+							set categories of e to eCats
+							--log "text file successfully created - " & eID
+							set ct to ct + 1
+							delay 2
+							
+							
+						on error outerErrMsg number outerErrNum
+							my writeToLog(logFilePath, "outer error num: " & outerErrNum)
+							--set errCtTxt to errCtTxt + 1
+							try
+								close access file fullFilePathTxt
+							end try
+						end try
+					end if
+					
+					
+					set eID to missing value
+					set eOrganizer to missing value
+					set eContent to missing value
+					set eEndTime to missing value
+					set eDuration to missing value
+					set eLoc to missing value
+					set isAllDay to missing value
+					set isRecur to missing value
+					set eRecurObj to missing value
+					set eTZObj to missing value
+					set eTZName to missing value
+					set isPriv to missing value
+					set attendeeData to missing value
+					set fileNameString to missing value
+					set fileNameTxt to missing value
+					set fullFilePathTxt to missing value
+				end if
+				
+				
+				set e to missing value
+				set eCats to missing value
+				set eSubject to missing value
+				set eStartTime to missing value
+				
+				
+				delay pauseAfterEvent
+			end repeat
+			
+		end if
+		set eventsInDay to missing value
+		my writeToLog(logFilePath, "Time point: " & endPoint as text)
+		set beginPoint to endPoint
+		delay pauseAfterBatch
+	end repeat
+end tell
+my writeToLog(logFilePath, "script ended --- " & (current date) as text)
+
+on getPreview(lis, wind)
+	set output to ""
+	
+	repeat with i from 1 to count of lis
+		if (length of item i of lis) > wind then
+			set output to output & (text 1 thru wind of item i of lis)
+		else
+			set output to output & item i of lis
+		end if
+		set output to output & "--"
+	end repeat
+	
+	return output
+end getPreview
+
+on cleanString(inputString)
+	set badChars to {":", "/", "\\", "*", "?", "\"", "<", ">", "|"}
+	repeat with badChar in badChars
+		set inputString to my replaceText(badChar, "", inputString)
+	end repeat
+	return inputString
+end cleanString
+
+on replaceText(find, replace, inputText)
+	set AppleScript's text item delimiters to find
+	set tempList to text items of inputText
+	set AppleScript's text item delimiters to replace
+	set outputText to tempList as text
+	set AppleScript's text item delimiters to ""
+	return outputText
+end replaceText
+
+on getAttendeeAddressesByType(ev)
+	set reqAtndeList to {}
+	set optAtndeList to {}
+	
+	tell application "Microsoft Outlook"
+		set i to 1
+		repeat with atnde in attendees of ev
+			if i is 101 then
+				set end of reqAtndeList to "...attendee list truncated..."
+				set end of optAtndeList to "...attendee list truncated..."
+				exit repeat
+			end if
+			
+			set atndeType to type of atnde
+			set atndeAddressObj to email address of atnde
+			set atndeEmail to address of atndeAddressObj
+			
+			if atndeType is required attendee type then
+				set end of reqAtndeList to atndeEmail
+			else if atndeType is optional attendee type then
+				set end of optAtndeList to atndeEmail
+			end if
+			set atndeType to missing value
+			set atndeAddressObj to missing value
+			set atndeEmail to missing value
+			if (i mod 50) = 0 then
+				delay 2
+			end if
+			
+			set i to i + 1
+		end repeat
+	end tell
+	set i to missing value
+	return {reqAttendees:reqAtndeList, optAttendees:optAtndeList}
+end getAttendeeAddressesByType
+
+on formattedTime(t)
+	set hrs to t div 3600
+	set mins to (t mod 3600) div 60 -- 3 minutes
+	set secs to t mod 60 -- 4 seconds
+	return hrs & "hrs, " & mins & "mins, " & secs & "secs"
+end formattedTime
+
+on formattedRecurObj(o)
+	tell application "Microsoft Outlook"
+		set et to get end type of o as text
+		set d to data of o as text
+		return "end type: " & et & "; " & "end details: " & d
+	end tell
+end formattedRecurObj
+
+on writeToLog(logFilePath, txt)
+	try
+		set logFilePointer to open for access file logFilePath with write permission
+		write txt & return to logFilePointer starting at eof
+		close access logFilePointer
+		
+	on error errMsg
+		try
+			close access logFile
+		end try
+	end try
+	
+	
+end writeToLog
