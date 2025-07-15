@@ -62,13 +62,6 @@ on run
 	end if
 	
 	
-	
-	
-	
-	
-	
-	-- ALSO ADD NUM ITEMS PROCESSED SUCCESSFULLY IN THE ERROR DIALOG BOX
-	
 	repeat
 		try
 			set prefDialog to display dialog "Enter batch size to process and wait time after each batch to prevent crashes (separated by a comma):" default answer "100, 5" buttons {"Stop", "Go"} default button "Go"
@@ -145,7 +138,7 @@ on run
 		
 		if outlookFoldInFocus is "inbox" then
 			set outlookFoldObj to a reference to inbox
-		else if outlookFoldInFocus is "inbox" then
+		else if outlookFoldInFocus is "sent items" then
 			set outlookFoldObj to a reference to sent items
 		end if
 		
@@ -165,8 +158,11 @@ on run
 		
 		if processDir is "forward" then
 			set beginBatch to 1
+			
+			
 		else
-			set beginBatch to itemUniverseToProcess
+			set beginBatch to count of messages of outlookFoldObj
+			
 		end if
 		
 		repeat
@@ -222,6 +218,7 @@ on run
 				
 				
 				set fileNameString to yr & "-" & mo & "-" & dy & "-" & msgID & "-" & my getPreview({senderName, my cleanString(msgSubject)}, 9)
+				log fileNameString
 				
 				
 				set foundTxtCat to false
@@ -350,7 +347,22 @@ on run
 				end if
 				
 				
+				set msgSubject to missing value
+				set msgSender to missing value
+				set senderEmail to missing value
+				set senderName to missing value
+				set msgContent to missing value
+				set msgRecTime to missing value
+				set isMeet to missing value
+				set yr to missing value
+				set mo to missing value
+				set dy to missing value
+				set recipientsData to missing value
+				set msgID to missing value
+				set msgCats to missing value
+				set atsString to missing value
 			end repeat
+			set msgBatch to missing value
 			
 			if processDir is "forward" then
 				set beginBatch to (endBatch + 1)
