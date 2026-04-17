@@ -64,7 +64,7 @@ on run
 	
 	repeat
 		try
-			set prefDialog to display dialog "Enter batch size to process and wait time after each batch to prevent crashes (separated by a comma):" default answer "100, 5" buttons {"Stop", "Go"} default button "Go"
+			set prefDialog to display dialog "Enter batch size to process and wait time after each batch to prevent crashes (separated by a comma):" default answer "20, 10" buttons {"Stop", "Go"} default button "Go"
 			set button1 to button returned of prefDialog
 			if button1 is "Stop" then
 				display dialog "Operation cancelled." buttons {"OK"} default button "OK"
@@ -88,6 +88,8 @@ on run
 			
 		end try
 	end repeat
+	
+	set delayIntervalForSkipping to 1
 	
 	-- Final confirmation with Cancel
 	set finalDialog to display dialog "Batch Size: " & batchSize & return & "Wait Interval: " & delayInterval & return & "Proceed?" buttons {"Stop", "Go"} default button "Go"
@@ -128,6 +130,7 @@ on run
 	
 	set ctTxt to 0
 	set ctEml to 0
+	
 	
 	set errCtTxt to 0
 	set errCtEml to 0
@@ -194,35 +197,19 @@ on run
 			
 			--repeat until 
 			repeat with msg in msgBatch
+				set ctTxtBatch to 0
+				set ctEmlBatch to 0
+				
 				try
-					set msgSubject to subject of msg
-					set msgSender to sender of msg -- still an object, need to extract text (doing in next line below)
-					set senderEmail to address of msgSender
-					set senderName to name of msgSender
-					set msgContent to plain text content of msg
-					set msgRecTime to time received of msg
-					set isMeet to is meeting of msg
-					set yr to year of msgRecTime
-					set mo to (month of msgRecTime as integer)
-					set dy to day of msgRecTime
-					set recipientsData to my getRecipientAddressesByType(msg) --returns a record of lists
-					set msgID to id of msg
 					set msgCats to categories of msg --extract message categories
-					set atsString to my getAtsDetails(msg) --returns a record of lists
 				on error errMsg number ErrNum
 					log ("Error in accessing msg: " & ErrNum as string) & "-" & errMsg
 				end try
 				
-				--set r to (random number from 1 to 9) as integer
-				
-				
-				
-				set fileNameString to yr & "-" & mo & "-" & dy & "-" & msgID & "-" & my getPreview({senderName, my cleanString(msgSubject)}, 9)
-				log fileNameString
-				
-				
 				set foundTxtCat to false
 				set foundEmlCat to false
+				
+				
 				
 				repeat with cat in msgCats
 					set n to name of cat
@@ -235,8 +222,52 @@ on run
 					end if
 				end repeat
 				
+				--understand if any processing is needed
+				set processTxt to false
+				set processEml to false
+				
 				if outTxt then
 					if not foundTxtCat then
+						set processTxt to true
+					end if
+				end if
+				
+				if outEml then
+					if not foundEmlCat then
+						set processEml to true
+					end if
+				end if
+				
+				if processTxt or processEml then
+					
+					try
+						set msgSubject to subject of msg
+						set msgSender to sender of msg -- still an object, need to extract text (doing in next line below)
+						set senderEmail to address of msgSender
+						set senderName to name of msgSender
+						set msgContent to plain text content of msg
+						set msgRecTime to time received of msg
+						set isMeet to is meeting of msg
+						set yr to year of msgRecTime
+						set mo to (month of msgRecTime as integer)
+						set dy to day of msgRecTime
+						set recipientsData to my getRecipientAddressesByType(msg) --returns a record of lists
+						set msgID to id of msg
+						set atsString to my getAtsDetails(msg) --returns a record of lists
+					on error errMsg number ErrNum
+						log ("Error in accessing msg: " & ErrNum as string) & "-" & errMsg
+					end try
+					
+					--set r to (random number from 1 to 9) as integer
+					
+					set fileNameString to yr & "-" & mo & "-" & dy & "-" & msgID & "-" & my getPreview({senderName, my cleanString(msgSubject)}, 9)
+					--log fileNameString
+					
+					
+					
+					
+					if processTxt then
+						
 						set fileNameTxt to fileNameString & ".txt"
 						set fullFilePathTxt to saveTxtFoldPath & fileNameTxt
 						log fullFilePathTxt
@@ -277,7 +308,7 @@ on run
 								set end of msgCats to txtCat
 								log "text file successfully created - " & msgID
 								set ctTxt to ctTxt + 1
-								
+								set ctTxtBatch to ctTxtBatch + 1
 							on error outerErrMsg number outerErrNum
 								log "outer error num: " & outerErrNum
 								set errCtTxt to errCtTxt + 1
@@ -286,11 +317,11 @@ on run
 								end try
 							end try
 						end if
+						
 					end if
-				end if
-				
-				if outEml then
-					if not foundEmlCat then
+					
+					if processEml then
+						
 						set fileNameEml to fileNameString & ".eml"
 						set fullFilePathEml to saveEmlFoldPath & fileNameEml
 						log fullFilePathEml
@@ -306,61 +337,67 @@ on run
 						end tell
 						
 						if not fileExistsEml then
+							delay 2
 							try
 								save msg in file fullFilePathEml as ".eml"
-								
+								delay 2
 								set end of msgCats to emlCat
 								log "Eml file successfully created - " & msgID
 								set ctEml to ctEml + 1
+								set ctEmlBatch to ctEmlBatch + 1
 							on error errMsg number ErrNum
 								set errCtEml to errCtEml + 1
 								log "Eml error num: " & ErrNum & "  " & errMsg
 							end try
 						end if
+						
 					end if
-				end if
-				
-				if not (foundEmlCat and foundTxtCat) then
-					set categories of msg to msgCats
-				end if
-				
-				if errCtTxt > errMax then
-					set errorMessage to "Text saving errors:  " & errCtTxt & return
-					set errorMessage to errorMessage & "EML saving errors:  " & errCtEml & return
-					set errorMessage to errorMessage & "Max allowed on either were:  " & errMax & return & return
-					set errorMessage to errorMessage & "Successful text downloads: " & ctTxt & return
-					set errorMessage to errorMessage & "Successful eml downloads: " & ctEml & return
 					
-					display dialog errorMessage buttons {"OK"}
-					return
-				end if
-				if errCtEml > errMax then
-					set errorMessage to "Text saving errors:  " & errCtTxt & return
-					set errorMessage to errorMessage & "EML saving errors:  " & errCtEml & return
-					set errorMessage to errorMessage & "Max allowed on either were:  " & errMax & return & return
-					set errorMessage to errorMessage & "Successful text downloads: " & ctTxt & return
-					set errorMessage to errorMessage & "Successful eml downloads: " & ctEml & return
+					if not (foundEmlCat and foundTxtCat) then
+						set categories of msg to msgCats
+					end if
+					
+					if errCtTxt > errMax then
+						set errorMessage to "Text saving errors:  " & errCtTxt & return
+						set errorMessage to errorMessage & "EML saving errors:  " & errCtEml & return
+						set errorMessage to errorMessage & "Max allowed on either were:  " & errMax & return & return
+						set errorMessage to errorMessage & "Successful text downloads: " & ctTxt & return
+						set errorMessage to errorMessage & "Successful eml downloads: " & ctEml & return
+						
+						display dialog errorMessage buttons {"OK"}
+						return
+					end if
+					if errCtEml > errMax then
+						set errorMessage to "Text saving errors:  " & errCtTxt & return
+						set errorMessage to errorMessage & "EML saving errors:  " & errCtEml & return
+						set errorMessage to errorMessage & "Max allowed on either were:  " & errMax & return & return
+						set errorMessage to errorMessage & "Successful text downloads: " & ctTxt & return
+						set errorMessage to errorMessage & "Successful eml downloads: " & ctEml & return
+						
+						
+						display dialog errorMessage buttons {"OK"}
+						return
+					end if
 					
 					
-					display dialog errorMessage buttons {"OK"}
-					return
+					set msgSubject to missing value
+					set msgSender to missing value
+					set senderEmail to missing value
+					set senderName to missing value
+					set msgContent to missing value
+					set msgRecTime to missing value
+					set isMeet to missing value
+					set yr to missing value
+					set mo to missing value
+					set dy to missing value
+					set recipientsData to missing value
+					set msgID to missing value
+					set msgCats to missing value
+					set atsString to missing value
+					
+				else
+					log "skipped"
 				end if
-				
-				
-				set msgSubject to missing value
-				set msgSender to missing value
-				set senderEmail to missing value
-				set senderName to missing value
-				set msgContent to missing value
-				set msgRecTime to missing value
-				set isMeet to missing value
-				set yr to missing value
-				set mo to missing value
-				set dy to missing value
-				set recipientsData to missing value
-				set msgID to missing value
-				set msgCats to missing value
-				set atsString to missing value
 			end repeat
 			set msgBatch to missing value
 			
@@ -370,7 +407,12 @@ on run
 				set beginBatch to (endBatch - 1)
 			end if
 			
-			delay delayInterval
+			if ctTxtBatch is 0 and ctEmlBatch is 0 then
+				delay delayIntervalForSkipping
+			else
+				delay delayInterval
+			end if
+			
 		end repeat
 	end tell
 end run
@@ -441,10 +483,20 @@ on getPreview(lis, wind)
 end getPreview
 
 on cleanString(inputString)
+	if inputString is "" then
+		return inputString
+	end if
+	
+	if inputString is missing value then
+		set inputString to ""
+		return inputString
+	end if
+	
 	set badChars to {":", "/", "\\", "*", "?", "\"", "<", ">", "|"}
 	repeat with badChar in badChars
 		set inputString to my replaceText(badChar, "", inputString)
 	end repeat
+	
 	return inputString
 end cleanString
 
