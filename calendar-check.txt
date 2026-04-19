@@ -19,8 +19,8 @@ tell application "Microsoft Outlook"
 					exit repeat
 				end if
 			end repeat
-	  log "end of sample---"	
-  end if
+	  		log "end of sample---"	
+  		end if
 		
 	end repeat
 	
