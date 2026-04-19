@@ -1,0 +1,27 @@
+tell application "Microsoft Outlook"
+	set myCals to calendars
+	set cal to missing value
+	set calCount to missing value
+	
+	repeat with c in myCals
+		set eventCount to (count of calendar events of c)
+		if eventCount is greater than 0 then
+			log id of c
+			log name of c
+			log "sample of events---"
+			
+			set n to 1
+			set allEvents to calendar events of c
+			repeat with e in allEvents
+				log subject of e as text
+				set n to n + 1
+				if n is equal to 5 then
+					exit repeat
+				end if
+			end repeat
+	  log "end of sample---"	
+  end if
+		
+	end repeat
+	
+end tell
